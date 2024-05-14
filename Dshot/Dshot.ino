@@ -10,7 +10,15 @@ const FREQUENCY frequency = F500;
 bool enableEdt = false;
 
 // DSHOT Output pin
-const uint8_t pinDshot = 8;
+const uint8_t m1 = 2;
+const uint8_t m2 = 3;
+const uint8_t m3 = 4;
+const uint8_t m4 = 5;
+const uint8_t m5 = 6;
+const uint8_t m6 = 7;
+const uint8_t m7 = 8;
+const uint8_t m8 = 9;
+const uint8_t m9 = 10;
 
 #define debug true
 #define laptop false
@@ -222,14 +230,14 @@ void sendInvertedDshot300Bit(uint8_t bit) {
     PORTH = B00000000;
     //DELAY_CYCLES(40);
     DELAY_CYCLES(37);
-    PORTH = B00100000; //B00100000;
+    PORTH = B00110000; //B00100000;
     //DELAY_CYCLES(13);
     DELAY_CYCLES(7);
   } else {
     PORTH = B00000000;
     //DELAY_CYCLES(20);
     DELAY_CYCLES(16);
-    PORTH = B00100000; //B00100000;
+    PORTH = B00110000; //B00100000;
     //DELAY_CYCLES(33);
     DELAY_CYCLES(25);
   }
@@ -299,7 +307,15 @@ void dshotSetup() {
     establishContact(); 
   }
 
-  pinMode(pinDshot, OUTPUT);
+  pinMode(m1, OUTPUT);
+  pinMode(m2, OUTPUT);
+  pinMode(m3, OUTPUT);
+  pinMode(m4, OUTPUT);
+  pinMode(m5, OUTPUT);
+  pinMode(m6, OUTPUT);
+  pinMode(m7, OUTPUT);
+  pinMode(m8, OUTPUT);
+  pinMode(m9, OUTPUT);
 
   // Set the default signal Level
   PORTH = B00100000;
