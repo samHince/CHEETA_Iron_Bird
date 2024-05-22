@@ -10,15 +10,28 @@ const FREQUENCY frequency = F500;
 bool enableEdt = false;
 
 // DSHOT Output pin
-const uint8_t m1 = 2;
-const uint8_t m2 = 3;
-const uint8_t m3 = 4;
-const uint8_t m4 = 5;
-const uint8_t m5 = 6;
-const uint8_t m6 = 7;
-const uint8_t m7 = 8;
-const uint8_t m8 = 9;
-const uint8_t m9 = 10;
+const uint8_t m1 = 22;
+const uint8_t m2 = 23;
+const uint8_t m3 = 24;
+const uint8_t m4 = 25;
+const uint8_t m5 = 26;
+const uint8_t m6 = 27;
+const uint8_t m7 = 28;
+const uint8_t m8 = 29;
+const uint8_t m9 = 30;
+
+// DSHOT Output port mask
+const uint8_t m1mask = B10000000;
+const uint8_t m2mask = B01000000;
+const uint8_t m3mask = B00100000;
+const uint8_t m4mask = B00010000;
+const uint8_t m5mask = B00001000;
+const uint8_t m6mask = B00000100;
+const uint8_t m7mask = B00000010;
+const uint8_t m8mask = B00000001;
+const uint8_t m9mask = B10000000;
+
+const uint16_t NOmask = B00000000;
 
 #define debug true
 #define laptop false
@@ -44,40 +57,6 @@ uint16_t counter[buffSize];
 uint16_t receivedPackets = 0;
 uint16_t successPackets = 0;
 
-bool newResponse = false;
-bool hasEsc = false;
-
-
-
-// Duration LUT - considerably faster than division
-const uint8_t duration[] = {
-  0,
-  0,
-  0,
-  0,
-  1, // 4
-  1, // 5 <
-  1, // 6
-  2, // 7
-  2,
-  2,
-  2, // 10 <
-  2,
-  2, // 12
-  3, // 13
-  3,
-  3, // 15 <
-  3,
-  3, // 17
-
-  // There should not be more than 3 bits with the same state after each other
-  4, // 18
-  4,
-  4, // 20 <
-  4,
-  4, // 22
-};
-
 Dshot dshot = new Dshot(inverted);
 volatile uint16_t frame = dshot.buildFrame(0, 0);
 volatile uint16_t request = dshot.buildFrame(0, 1);
@@ -94,9 +73,10 @@ uint32_t lastPeriodTime = 0;
 
 #define DELAY_CYCLES(n) __builtin_avr_delay_cycles(n)
 
-void sendDshot300Frame(uint16_t temp);
+void sendDshot300Frame(uint16_t notelem, uint16_t telem, uint8_t motor);
 void sendDshot300Bit(uint8_t bit);
 void sendInvertedDshot300Bit(uint8_t bit);
+void sendBit(uint8_t A, uint8_t C); // (byte m1, byte m2, byte m3, byte m4, byte m5, byte m6, byte m7, byte m8, byte m9);
 
 void readUpdate();
 void printResponse();
@@ -107,8 +87,13 @@ void printResponse();
 uint16_t ticker = 0;
 uint16_t dshotValue = 0;
 
+uint8_t mreq = 9;
+uint8_t Amask = NOmask;
+uint8_t Cmask = NOmask;
 
-#define telemPin 19//13
+uint8_t test = 0;
+
+#define telemPin 19 //13
 
 static int16_t ESC_telemetrie[5]; // Temperature, Voltage, Current, used mAh, eRpM
 static uint16_t requestTelemetrie = 0;
@@ -200,13 +185,100 @@ void establishContact() {
 ///////////////////////////// end TELEM STUFF ////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void sendDshot300Frame(uint16_t temp) {
+void sendDshot300Frame(uint16_t notelem, uint16_t telem, uint8_t motor) {
   //uint16_t temp = frame;
   uint8_t offset = 0;
+  //byte telemetry = 1; 
   // Serial.println(temp, BIN);
+
+  //uint16_t telem = request;
+  //uint16_t notelem = temp;
+
+  uint16_t M1 = notelem;
+  uint16_t M2 = notelem;
+  uint16_t M3 = notelem;
+  uint16_t M4 = notelem;
+  uint16_t M5 = notelem;
+  uint16_t M6 = notelem;
+  uint16_t M7 = notelem;
+  uint16_t M8 = notelem;
+  uint16_t M9 = notelem;
+
+  switch(motor) {
+    case 1:
+      Serial.println("M1 Telem");
+      M1 = telem;
+      break;
+    case 2:
+      Serial.println("M2 Telem");
+      M2 = telem;
+      break;
+    case 3:
+      Serial.println("M3 Telem");
+      M3 = telem;
+      break;
+    case 4:
+      Serial.println("M4 Telem");
+      M4 = telem;
+      break;  
+    case 5:
+      Serial.println("M5 Telem");
+      M5 = telem;
+      break;
+    case 6:
+      Serial.println("M6 Telem");
+      M6 = telem;
+      break;
+    case 7:
+      Serial.println("M7 Telem");
+      M7 = telem;
+      break;
+    case 8:
+      Serial.println("M8 Telem");
+      M8 = telem;
+      break;
+    case 9:
+      Serial.println("M9 Telem");
+      M9 = telem;
+      break;
+  }
+
+  unsigned int A[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+  unsigned int C[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
   do {
-    sendInvertedDshot300Bit((temp & 0x8000) >> 15);
-    temp <<= 1;
+    //A[offset] = ~(B00000000 | ((M1 & 0x8000) >> 8) | ((M2 & 0x8000) >> 9) | ((M3 & 0x8000) >> 10) | ((M4 & 0x8000) >> 11) | ((M5 & 0x8000) >> 12) | ((M6 & 0x8000) >> 13) | ((M7 & 0x8000) >> 14) | ((M8 & 0x8000) >> 15));
+    A[offset] = B00000000 | (M1 & 0x8000) >> 15;
+    A[offset] |= (M2 & 0x8000) >> 14;
+    A[offset] |= (M3 & 0x8000) >> 13;
+    A[offset] |= (M4 & 0x8000) >> 12;
+    A[offset] |= (M5 & 0x8000) >> 11;
+    A[offset] |= (M6 & 0x8000) >> 10;
+    A[offset] |= (M7 & 0x8000) >> 9;
+    A[offset] |= (M8 & 0x8000) >> 8;
+    A[offset] = ~A[offset];
+
+    C[offset] = ~(B01111111 | ((M9 & 0x8000) >> 8));
+
+    //sendBit(A, C);
+    //sendBit((M1 & 0x8000) >> 15, (M2 & 0x8000) >> 15, (M3 & 0x8000) >> 15, (M4 & 0x8000) >> 15, (M5 & 0x8000) >> 15, (M6 & 0x8000) >> 15, (M7 & 0x8000) >> 15, (M8 & 0x8000) >> 15, (M9 & 0x8000) >> 15);
+    M1 <<= 1;
+    M2 <<= 1;
+    M3 <<= 1;
+    M4 <<= 1;
+    M5 <<= 1;
+    M6 <<= 1;
+    M7 <<= 1;
+    M8 <<= 1;
+    M9 <<= 1;
+
+  } while(++offset < 0x10);
+
+  offset = 0;
+
+  do {
+//    sendBit((M1 & 0x8000) >> 15, (M2 & 0x8000) >> 15, (M3 & 0x8000) >> 15, (M4 & 0x8000) >> 15, (M5 & 0x8000) >> 15, (M6 & 0x8000) >> 15, (M7 & 0x8000) >> 15, (M8 & 0x8000) >> 15, (M9 & 0x8000) >> 15);
+    sendBit(A[offset], C[offset]);
   } while(++offset < 0x10);
 }
 
@@ -227,20 +299,32 @@ void sendDshot300Frame(uint16_t temp) {
  */
 void sendInvertedDshot300Bit(uint8_t bit) {
   if(bit) {
-    PORTH = B00000000;
-    //DELAY_CYCLES(40);
+    PORTA = B00000000;
+    PORTC = B00000000;
     DELAY_CYCLES(37);
-    PORTH = B00110000; //B00100000;
-    //DELAY_CYCLES(13);
+    PORTA = B11111111;
+    PORTC = B10000000;
     DELAY_CYCLES(7);
   } else {
-    PORTH = B00000000;
-    //DELAY_CYCLES(20);
+    PORTA = B00000000;
+    PORTC = B00000000;
     DELAY_CYCLES(16);
-    PORTH = B00110000; //B00100000;
-    //DELAY_CYCLES(33);
+    PORTA = B11111111;
+    PORTC = B10000000;
     DELAY_CYCLES(25);
   }
+}
+
+void sendBit(uint8_t A, uint8_t C){//(byte m1, byte m2, byte m3, byte m4, byte m5, byte m6, byte m7, byte m8, byte m9) {
+  PORTA = B00000000;
+  PORTC = B00000000;
+  DELAY_CYCLES(16); // 16 //10 works when B11111111 in next line
+  PORTA = A; //~(B00000000 | (m1 << 7) | (m2 << 6) | (m3 << 5) | (m4 << 4) | (m5 << 3) | (m6 << 2) | (m7 << 1) | (m8));
+  PORTC = C; //~(B01111111 | (m9 << 7));
+  DELAY_CYCLES(21); //21
+  PORTA = B11111111;
+  PORTC = B10000000;
+  DELAY_CYCLES(7);
 }
 
 void setupTimer() {
@@ -250,37 +334,9 @@ void setupTimer() {
   TCCR2B = 0;
   TCNT2 = 0;
 
-  switch(frequency) {
-    case F500: {
-      // 500 Hz (16000000/((124 + 1) * 256))
-      OCR2A = 124;
-      TCCR2B |= 0b00000110; // Prescaler 256
-    } break;
-
-    case F1k: {
-      // 1000 Hz (16000000/((124 + 1) * 128))
-      OCR2A = 124;
-      TCCR2B |= 0b00000101; // Prescaler 128
-    } break;
-
-    case F2k: {
-      // 2000 Hz (16000000/((124 + 1) * 64))
-      OCR2A = 124;
-      TCCR2B |= 0b00000100; // Prescaler 64
-    } break;
-
-    case F4k: {
-      // 4000 Hz (16000000/( (124 + 1) * 32))
-      OCR2A = 124;
-      TCCR2B |= 0b00000011; // Prescaler 32
-    } break;
-
-    default: {
-      // 8000 Hz (16000000/( (249 + 1) * 8))
-      OCR2A = 249;
-      TCCR2B |= 0b00000010; // Prescaler 8
-    } break;
-  }
+  // 500 Hz (16000000/((124 + 1) * 256))
+  OCR2A = 124;
+  TCCR2B |= 0b00000110; // Prescaler 256
 
   TCCR2A |= 0b00001010; // CTC mode - count to OCR2A
   TIMSK2 = 0b00000010; // Enable INT on compare match A
@@ -290,12 +346,17 @@ void setupTimer() {
 
 ISR(TIMER2_COMPA_vect) {
   ticker++;
-  if(ticker == 499){ 
-    sendDshot300Frame(request);
+  //mreq++;
+  if(ticker == 499){ //499 
+    sendDshot300Frame(frame, request, mreq);
     ticker = 0;
+    mreq++;
+    if(mreq > 9){
+      mreq = 0;
+    }
   }
   else{
-    sendDshot300Frame(frame);
+    sendDshot300Frame(frame, request, 0);
   }
 }
 
@@ -306,6 +367,20 @@ void dshotSetup() {
   if(laptop){
     establishContact(); 
   }
+364365366367368369370371372373374375376377378379380381382383384385386387388389390391392393394395396397
+  // Set the default signal Level B12345678
+  PORTA = B11111111;
+  PORTC = B10000000;
+
+  #if debug
+    Serial.println("Input throttle value to be sent to ESC");
+    Serial.println("Valid throttle values are 47 - 2047");
+    Serial.println("Lines are only printed if the value changed");
+
+    Serial.print("Frames are sent repeatadly in the chosen update frequency: ");
+    Serial.print(frequency);
+
+
 
   pinMode(m1, OUTPUT);
   pinMode(m2, OUTPUT);
@@ -317,8 +392,9 @@ void dshotSetup() {
   pinMode(m8, OUTPUT);
   pinMode(m9, OUTPUT);
 
-  // Set the default signal Level
-  PORTH = B00100000;
+  // Set the default signal Level B12345678
+  PORTA = B11111111;
+  PORTC = B10000000;
 
   #if debug
     Serial.println("Input throttle value to be sent to ESC");
@@ -346,11 +422,11 @@ void consolloop() {
     if(debug){
       Serial.print("> Frame: ");
       Serial.print(frame, BIN);
-      Serial.print(" Value: ");
+      Serial.print(", Request: ");
+      Serial.print(request, BIN);
+      Serial.print(", Value: ");
       Serial.println(dshotValue);
     }
-
-
   }
 }
 
